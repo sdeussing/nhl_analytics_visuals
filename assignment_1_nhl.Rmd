@@ -1,0 +1,416 @@
+---
+title: "Assignment_1"
+author: "Sarah Deussing"
+date: "2024-10-30"
+output: html_document
+---
+
+
+## Dataset
+
+The dataset includes shots from the 2021-2022 NHL season.
+It can be accessed at: https://data.scorenetwork.org/hockey/nhl-shots.html 
+
+```{r read in data}
+nhl_shots <- read.csv("nhl-shots-2021.csv")
+head(nhl_shots)
+```
+
+```{r libraries}
+library(ggplot2)
+library(grid) 
+library(jpeg) 
+library(gganimate)
+library(dplyr)
+library(stringr)
+library(ggdark)
+library(ggimage)
+```
+
+In this analysis, we will be looking at shot efficiency variables with several different visualizations.
+
+Important variables for shot location/analysis include:
+  * x_fixed
+  * y_fixed
+  * shot_distance
+  * shot_angle
+  * empty_net
+  * shot_outcome
+
+## Visualizations
+We will be visualizing different aspects of shots data from the 2021-2022 NHL season.
+
+There are four different shot outcome possibilities: SHOT, MISSED_SHOT, BLOCKED_SHOT, and GOAL.
+  - SHOT: taken on the goalie and saved
+  - MISSED_SHOT: shot not close to goalie
+  - BLOCKED_SHOT: shot blocked by defense or another non-goalie member
+  - GOAL: shooter goal
+
+#### (1) Shot Location
+First, we will look at shot location in several different formats.
+
+Let's load in the background ice rink.
+```{r background ice image}
+ice <- rasterGrob(readJPEG("rink.jpg"),
+                    width=unit(1,"npc"), height=unit(1,"npc"))
+```
+
+Now, let's plot all shots in the dataset on this rink to see the entirety of the dataset.
+```{r}
+ggplot(nhl_shots,aes(x=x_fixed, y=y_fixed, color = shot_outcome)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.3) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(title = "NHL Shots 2021-2022 Season", 
+       color = "Shot Made/Missed")
+```
+
+This graph is too densely populated - we need to have some form of filter or index to see the data better. 
+
+First, let's look at shots across the different periods in a game.
+```{r}
+periods <- unique(nhl_shots$period)
+```
+
+```{r}
+for(i in 1:length(periods)){
+  shot_loc_per <- ggplot(nhl_shots[nhl_shots$period == periods[i],], 
+                         aes(x=x_fixed, y=y_fixed, color = shot_outcome)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.3) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(title = paste("NHL Shots, Period: ",periods[i], sep = ""), 
+       color = "Shot Type")
+  print(shot_loc_per)
+
+}
+```
+
+We see that as a game continues, less shots are being taken. Across all periods, we see more goals closer to the net, with more missed shots being taken farther away. We also see blocked shots concentrated closer to the net, meaning that defensive individuals played a strong role in the season but were better at blocking shots closer to the goal.
+
+Even with this period filter, there are still too many datapoints to view any strong patterns.
+Additionally, this analysis by period would not be useful to a NHL team. A coach or data analyst would want to look at opposing team's shot and defense patterns. Therefore, our next few visualizations will look at data on a team- and game-level.
+
+Let's first perform this same analysis by period for shots in only one game. 
+```{r}
+set.seed(12345)
+gameID <- sample(nhl_shots$game_id, 1)
+game <- nhl_shots[nhl_shots$game_id == gameID, ]
+
+periods <- unique(game$period)
+team1 <- game$home_name
+team2 <- game$away_name
+
+for(i in 1:length(periods)){
+  shot_loc_per <- ggplot(game[game$period == periods[i],], 
+                         aes(x=x_fixed, y=y_fixed, color = shot_outcome)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.8, size = 5) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(title = paste(team1, " v. ", team2, ": Period ",periods[i], sep = ""), 
+       color = "Shot Type")
+  print(shot_loc_per)
+}
+```
+
+In this particular game, we don't see a goal until the second period. We generally see these goals concentrated closer to the net, with missed shots (on average) being taken from farther away. We also see some clusters of blocked shots - shots blocked by the defense but not the goalie - concentrated close to the net.
+
+However, this visualization does not distinguish between the teams - we cannot see which team took which shot. To analyze a team's performance, we can do a different type of filter.
+
+This type of graph could be used for scouting analysis to see where an opponent is taking the most number of shots and where their shooters are (un)successful. Let's perform the same analysis for a specific team: the Tampa Bay Lightning. In the 2021-2022 season, the Lightning won the championship.
+
+Because there are so many data points for this team, we will filter to just goals scored, but this filter can be changed to blocked, missed, or other shots when scouting.
+```{r}
+tb_data <- nhl_shots[nhl_shots$event_team == 'Tampa Bay Lightning', ]
+tb_data <- tb_data[tb_data$shot_outcome == 'GOAL',]
+
+periods <- c(1, 2, 3, 4, 5, 6)
+
+for(i in 1:length(periods)){
+  shot_loc_tb <- ggplot(tb_data[tb_data$period == periods[i],], 
+                         aes(x=x_fixed, y=y_fixed)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.6, size = 2) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(title = paste("Tampa Bay Lightning Goals: Period ",periods[i], sep = ""))
+  print(shot_loc_tb)
+}
+```
+
+During the first period, we see the Lightning taking shots from a wide range on both nets. During the second period, the team's goals become much tighter to the net - they become more successful from closer locations. In the third period, the team goes back to farther shot, which could be the result of a lead later in the game.
+
+The analysis above shows the strenth of the Lightning's offense. We can also look at the strength of their defense by changing the type of shot we're looking at.
+```{r}
+tb_data2 <- nhl_shots %>%
+  filter((home_name == "Tampa Bay Lightning" & event_team != "Tampa Bay Lightning") |
+         (away_name == "Tampa Bay Lightning" & event_team != "Tampa Bay Lightning"))
+tb_data2 <- tb_data2[tb_data2$shot_outcome %in% c('BLOCKED_SHOT', 'SHOT'), ]
+
+periods <- c(1, 2, 3, 4, 5, 6)
+
+for(i in 1:length(periods)){
+  shot_loc_tb <- ggplot(tb_data2[tb_data2$period == periods[i],], 
+                         aes(x=x_fixed, y=y_fixed, color = shot_outcome)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.6, size = 2) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+ labs(title = paste("Tampa Bay Lightning Defense: Period ",periods[i], sep = ""),
+      color = "Shot Outcome")
+  print(shot_loc_tb)
+}
+```
+
+Here, a SHOT is one saved by the Lightning's goalie and a BLOCKED_SHOT is one blocked by a non-goalie Lightning member. We see the defense (non-goalie)'s strength closer to the net - there are no blocked shots far from the net. On the other hand, shots taken farther from the net are typically saved by the Lightning's goalie. For a team playing the lightning, taking a shot from farther away means the defense is less likely to be successful in blocking. For the Lightning, further training would include strengthening the defense's ability to follow the puck and block a shot taken from farther away, so that these shots are not defended only by the team's goalie.
+
+#### (2) Shot Distance Efficiency
+Now, let's look at shot efficiency at different distances. We will iterate through different shot distances from the net.
+```{r}
+#unique(round(nhl_shots$shot_distance,0))
+nhl_shots2 <- nhl_shots
+nhl_shots2$shot_dist_round <- round(nhl_shots2$shot_distance,0)
+nhl_shots2 <- nhl_shots2[!is.na(nhl_shots2$shot_dist_round), ]
+
+dist_plots <- ggplot(nhl_shots2, aes(x=x_fixed, y=y_fixed, color = shot_outcome)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.8, size = 5) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  transition_time(as.numeric(shot_dist_round)) + 
+  labs(title = "NHL Shots By Distance", 
+       color = "Shot Type")
+
+animate(dist_plots, fps = 2)
+```
+
+As we move farther from the net, we see two elements decrease - the total number of goals and the total number of shots. With this farther distance, we see more missed shots, meaning that shooters are less accurate from farther distances (as to be expected). 
+
+This analysis can be used in scouting or other analysis by filtering to just one team and looking at the team's shooter accuracy and efficiency throughout the season. 
+
+#### (3) Mimicking The Shots In A Game
+Because each shot has a gameID, we can iterate through all the shots in a single game to mimic how the game was played. For our analysis, we will use the same game as above. 
+```{r}
+game$index <- 1:nrow(game)
+
+game_plots <- ggplot(game, aes(x=x_fixed, y=y_fixed, color = shot_outcome)) + 
+  annotation_custom(ice) + 
+  geom_point(alpha = 0.8, size = 5) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  transition_time(as.numeric(index)) + 
+  labs(title = paste0(team1, "v. ", team2, ": Shots In the Game", sep = ""), 
+       color = "Shot Type")
+
+animate(game_plots, fps = 2)
+```
+
+We see that most shots saved by the goalie (denoted SHOT) are taken farther from the net. Blocked shots, missed shots, and goal are taken much closer. 
+
+This analysis would be useful for a team to look at how an opponent (or their own team) played in a single game. To do so, they would just filter to one team from within this game.
+
+
+#### (4) Shot Percentage By Team
+We will now look at shot percentage for each team and compare them on the same graph. To do so, we need to aggregate each team's shot percentage statistics.
+
+A BLOCKED_SHOT, a MISSED_SHOT, and a SHOT will all be denoted as an error for this analysis because these shots did not end in a goal.
+```{r}
+shot_perc <- nhl_shots %>%
+  select(event_team, event_player_1_name, shot_outcome) %>%
+  group_by(event_player_1_name) %>%
+  mutate(n_error = sum((shot_outcome == "BLOCKED_SHOT") + (shot_outcome == "MISSED_SHOT") + 
+                         (shot_outcome == "SHOT")),
+         n_goals = sum(shot_outcome == "GOAL")) %>%
+  select(event_team, event_player_1_name, n_error, n_goals) %>%
+  rename(team = event_team, shooter_name = event_player_1_name) %>%
+  distinct() %>%
+  mutate(shot_percent = n_goals/n_error)
+
+## Add league
+shot_perc <- shot_perc %>%
+  mutate(division = case_when(
+    str_detect(team, "Panthers|Maple Leafs|Lightning|Bruins|Sabres|Red Wings|Senators|Canadiens") ~ "Atlantic",
+    str_detect(team, "Hurricanes|Rangers|Penguins|Capitals|Islanders|Blue Jackets|Devils|Flyers") ~ "Metropolitan",
+    str_detect(team, "Avalanche|Wild|Blues|Stars|Predators|Jets|Blackhawks|Coyotes") ~ "Central",
+    str_detect(team, "Flames|Oilers|Kings|Golden Knights|Canucks|Sharks|Ducks|Kraken") ~ "Pacific",
+    TRUE ~ ""
+  ))
+
+head(shot_perc)
+```
+
+Now, we can aggregate these statistics by team to find the total number of shots and average shot percentage of the team's shooters. 
+
+We will also add logos for each team for our graph. These logos are taken from sportslogos.net online.
+```{r}
+shot_perc_team2 <- shot_perc %>% 
+  group_by(team) %>%
+  mutate(total_shots = sum(n_error + n_goals),
+         avg_shot_percentage = mean(shot_percent)) %>%
+  select(team, division, total_shots, avg_shot_percentage) %>%
+  distinct()
+
+
+# Make team logos dataframe
+nhl_logos <- data.frame(team = shot_perc_team2$team, logo = "")
+
+nhl_logos[nhl_logos$team == 'Anaheim Ducks',]$logo <- "https://content.sportslogos.net/logos/1/1736/full/1651_anaheim_ducks-primary-20141.png"
+
+nhl_logos[nhl_logos$team == 'Arizona Coyotes',]$logo <- "https://content.sportslogos.net/logos/1/5263/full/arizona_coyotes_logo_primary_2022_sportslogosnet-8273.png"
+
+nhl_logos[nhl_logos$team == 'Boston Bruins',]$logo <- "https://content.sportslogos.net/logos/1/3/full/boston_bruins_logo_primary_20083802.png"
+
+nhl_logos[nhl_logos$team == 'Buffalo Sabres',]$logo <- "https://content.sportslogos.net/logos/1/4/full/buffalo_sabres_logo_primary_20212495.png"
+
+nhl_logos[nhl_logos$team == 'Buffalo Sabres',]$logo <- "https://content.sportslogos.net/logos/1/4/full/buffalo_sabres_logo_primary_20212495.png"
+
+nhl_logos[nhl_logos$team == 'Calgary Flames',]$logo <- "https://content.sportslogos.net/logos/1/5/full/calgary_flames_logo_primary_20212695.png"
+
+nhl_logos[nhl_logos$team == 'Carolina Hurricanes',]$logo <- "https://content.sportslogos.net/logos/1/6/full/carolina_hurricanes_logo_primary_20004386.png"
+
+nhl_logos[nhl_logos$team == 'Chicago Blackhawks',]$logo <- "https://content.sportslogos.net/logos/1/7/full/56.png"
+
+nhl_logos[nhl_logos$team == 'Colorado Avalanche',]$logo <- "https://content.sportslogos.net/logos/1/8/full/64.png"
+
+nhl_logos[nhl_logos$team == 'Columbus Blue Jackets',]$logo <- "https://content.sportslogos.net/logos/1/9/full/jhepegs329pc7ugyypebl28wg.png"
+
+nhl_logos[nhl_logos$team == 'Dallas Stars',]$logo <- "https://content.sportslogos.net/logos/1/10/full/dallas_stars_logo_primary_2022_sportslogosnet-4332.png"
+
+nhl_logos[nhl_logos$team == 'Detroit Red Wings',]$logo <- "https://content.sportslogos.net/logos/1/11/full/yo3wysbjtagzmwj37tb11u0fh.png"
+
+nhl_logos[nhl_logos$team == 'Edmonton Oilers',]$logo <- "https://content.sportslogos.net/logos/1/12/full/2728_edmonton_oilers-primary-2018.png"
+
+nhl_logos[nhl_logos$team == 'Florida Panthers',]$logo <- "https://content.sportslogos.net/logos/1/13/full/florida_panthers_logo_primary_20174924.png"
+
+nhl_logos[nhl_logos$team == 'Los Angeles Kings',]$logo <- "https://content.sportslogos.net/logos/1/14/full/2220_los_angeles_kings-primary-2020.png"
+
+nhl_logos[nhl_logos$team == 'Minnesota Wild',]$logo <- "https://content.sportslogos.net/logos/1/15/full/8810_minnesota_wild-primary-2014.png"
+
+nhl_logos[nhl_logos$team == 'Montréal Canadiens',]$logo <- "https://content.sportslogos.net/logos/1/16/full/montreal_canadiens_logo_primary_20001687.png"
+
+nhl_logos[nhl_logos$team == 'Nashville Predators',]$logo <- "https://content.sportslogos.net/logos/1/17/full/lvchw3qfsun2e7oc02kh2zxb6.png"
+
+nhl_logos[nhl_logos$team == 'New Jersey Devils',]$logo <- "https://content.sportslogos.net/logos/1/18/full/32tfs723a3bes0p0hb4hgcy1u.png"
+
+nhl_logos[nhl_logos$team == 'New York Islanders',]$logo <- "https://content.sportslogos.net/logos/1/19/full/3911_new_york_islanders-primary-2018.png"
+
+nhl_logos[nhl_logos$team == 'New York Rangers',]$logo <- "https://content.sportslogos.net/logos/1/20/full/new_york_rangers-primary_20006777.png"
+
+nhl_logos[nhl_logos$team == 'Ottawa Senators',]$logo <- "https://content.sportslogos.net/logos/1/21/full/1129_ottawa_senators-primary-2021.png"
+
+nhl_logos[nhl_logos$team == 'Philadelphia Flyers',]$logo <- "https://content.sportslogos.net/logos/1/22/full/philadelphia_flyers_logo_primary_20008300.png"
+
+nhl_logos[nhl_logos$team == 'Pittsburgh Penguins',]$logo <- "https://content.sportslogos.net/logos/1/24/full/pittsburgh_penguins_logo_primary_20177954.png"
+
+nhl_logos[nhl_logos$team == 'San Jose Sharks',]$logo <- "https://content.sportslogos.net/logos/1/26/full/san_jose_sharks-primary_20099429.png"
+
+nhl_logos[nhl_logos$team == 'Seattle Kraken',]$logo <- "https://content.sportslogos.net/logos/1/6740/full/seattle_kraken_logo_primary_20226314.png"
+
+nhl_logos[nhl_logos$team == 'St. Louis Blues',]$logo <- "https://content.sportslogos.net/logos/1/25/full/187.png"
+
+nhl_logos[nhl_logos$team == 'Tampa Bay Lightning',]$logo <- "https://content.sportslogos.net/logos/1/27/full/tampa_bay_lightning_logo_primary_20124022.png"
+
+nhl_logos[nhl_logos$team == 'Toronto Maple Leafs',]$logo <- "https://content.sportslogos.net/logos/1/28/full/8761_toronto_maple_leafs-primary-2017.png"
+
+nhl_logos[nhl_logos$team == 'Vancouver Canucks',]$logo <- "https://content.sportslogos.net/logos/1/29/full/2084_vancouver_canucks-primary-2020.png"
+
+nhl_logos[nhl_logos$team == 'Vegas Golden Knights',]$logo <- "https://content.sportslogos.net/logos/1/6114/full/vegas_golden_knights_logo_primary_20185183.png"
+
+nhl_logos[nhl_logos$team == 'Washington Capitals',]$logo <- "https://content.sportslogos.net/logos/1/30/full/llrs2zxi127vkqgcsvfb.png"
+
+nhl_logos[nhl_logos$team == 'Winnipeg Jets',]$logo <- "https://content.sportslogos.net/logos/1/3050/full/z9qyy9xqoxfjn0njxgzoy2rwk.png"
+```
+
+Let's plot this data.
+```{r}
+ggplot(data = shot_perc_team2,
+                 aes(x = total_shots, 
+                     y = avg_shot_percentage)) + 
+  geom_point() + 
+  geom_image(image = nhl_logos$logo, asp = 16/9) +
+  dark_theme_bw() + 
+   labs(x = "Total Shots Taken",
+       y = "Avg. Shot Percentage",
+       title = "NHL Team Shot Efficiency",
+       subtitle = "2021-2022 Season") 
+
+invert_geom_defaults()
+```
+
+We see that the Capitals have a significantly higher shot percentage than every other team in the NHL, but they are not taking considerably more shots. Teams concentrated on the left are not scoring as many goals - they are taking less shots with a lower average shot percentage. These teams need to improve both the accuracy and number of shot opportunities - they need to practice finding openings from the defense and ability to shoot overall. Teams on the bottom right, like the Panthers, are taking the most shots in a season but have a low shot percentage ; advice for these teams would to increase their accuracy, as they are shooting a lot but are not scoring as often as some of their opponents.
+
+#### (5) Goalie Strength
+We can do a similar analysis for goalies. 
+
+To get the defensive team, we have to extract the team name (either home or away) that does not match the event team (because the event team is the shooting team). For this analysis, we are only looking at shots and goals, because missed shots and blocked shots did not end up near the goal.
+
+For our shooter analysis, we average the shot percentage across a team's shooters. For this defensive analysis, we will only look at one goalie per team - the goalie with the highest number of shots taken on them. This goalie is most likely the starting goalie, with any other goalies for the team playing considerably less.
+```{r}
+nhl_copy <- nhl_shots
+nhl_copy$def_team[which(nhl_shots$event_team == nhl_shots$home_name)] <-    nhl_copy$away_name[which(nhl_shots$event_team == nhl_shots$home_name)]
+
+nhl_copy$def_team[which(nhl_shots$event_team == nhl_shots$away_name)] <-    nhl_copy$home_name[which(nhl_shots$event_team == nhl_shots$away_name)]
+goal_temp <- unique(nhl_copy[which(nhl_copy$shot_outcome %in% c("SHOT","GOAL") & 
+                                     !is.na(nhl_copy$event_goalie_name)),c("event_goalie_name", "def_team" )])
+
+blocks <- goals <- rep(NA, nrow(goal_temp))
+for(i in 1:nrow(goal_temp)){
+  blocks[i] <- sum(nhl_shots$shot_outcome[which(nhl_shots$event_goalie_name == goal_temp$event_goalie_name[i])] ==  "SHOT")
+    goals[i] <- sum(nhl_shots$shot_outcome[which(nhl_shots$event_goalie_name == goal_temp$event_goalie_name[i])] ==  "GOAL")
+}
+
+res <- cbind.data.frame(goal_temp, blocks, goals)
+res$total_shots <- res$blocks + res$goals
+res$save_per <- res$blocks/res$total_shots
+
+res <- res[order(res$total_shots, decreasing = TRUE),]
+final_goalie <- res[!duplicated(res$def_team),]
+
+```
+
+
+Let's plot this data.
+```{r}
+ggplot(data = final_goalie,
+                 aes(x = total_shots, 
+                     y = save_per)) + 
+  geom_point() + 
+  geom_image(image = nhl_logos$logo, asp = 16/9) +
+  dark_theme_bw() + 
+   labs(x = "Total Shots Taken On Goalie",
+       y = "Avg. Save Percentage",
+       title = "NHL Team Goalie Efficiency",
+       subtitle = "2021-2022 Season") 
+
+invert_geom_defaults()
+```
+
+We see the starting goalie for the Pittsburgh Penguins with the highest save (block) percentage, with a high amount of shots taken on him. We see the goalie for the Tampa Bay Lightning having the most shots taken on him, and he has a comparatively high save percentage as well. On the other hand, the bottom half of the graph shows teams with the lowest save percentage - this includes the Columbus Blue Jackets and the Calgary Flames at the bottom. In terms of shots taken on these goalies, their respective numbers is under the halfway mark for shots. There are not many teams in the bottom right quadrant of the graph - this would represent a high number of shots taken on the goalie and a low save percentage. We see the Seattle Kraken, the Buffalo Sabres, and the Edmonton Oilers closest to this metric. 
+
+## Conclusion
+We have generated many different visualizations that can be useful to different teams, coaches, and statisticians in the NHL. We compared different teams to one another in both offensive and defensive efficiency. We also looked at specific historical games and analysis for specific teams. Any of these visualizations can be used for different years of data, different teams, or other shot types by simply changing or adding a simple filter. They were created to be replicable for any team in the NHL.
+
